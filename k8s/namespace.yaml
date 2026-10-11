@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dentsu-demo-app
+  labels:
+    app.kubernetes.io/name: dentsu-demo-app
+    # The AWS Load Balancer Controller adds a readiness gate to pods in this
+    # namespace: a new pod only counts as Ready once the ALB reports it
+    # healthy, so a rollout never removes working targets too early.
+    elbv2.k8s.aws/pod-readiness-gate-inject: enabled

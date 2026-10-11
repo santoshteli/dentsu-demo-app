@@ -33,6 +33,30 @@ docker run --rm -p 3000:3000 dentsu-demo-app:local
 curl localhost:3000/health
 ```
 
+## Kubernetes
+
+Manifests in `k8s/`, for namespace `dentsu-demo-app`:
+
+| File | Contents |
+|---|---|
+| `namespace.yaml` | Namespace, labelled for ALB pod readiness gates |
+| `deployment.yaml` | 2 replicas, zero-downtime rolling update, readiness and liveness probes on `/health`, CPU and memory requests and limits, non-root with a read-only root filesystem |
+| `service.yaml` | ClusterIP, port 80 to container port 3000 |
+| `ingress.yaml` | `ingressClassName: alb`, internet-facing, `target-type: ip`, health check `/health` |
+
+The image in `deployment.yaml` is `IMAGE_PLACEHOLDER`. The pipeline replaces it with `<ECR registry>/dentsu-demo-app:<git SHA>` at deploy time, so the AWS account ID is not stored in this repo. Manual deploy from inside the VPC:
+
+```bash
+kubectl apply -f k8s/namespace.yaml -f k8s/service.yaml -f k8s/ingress.yaml
+sed "s|IMAGE_PLACEHOLDER|$IMAGE|" k8s/deployment.yaml | kubectl apply -f -
+kubectl -n dentsu-demo-app rollout status deploy/dentsu-demo-app
+kubectl -n dentsu-demo-app get ingress   # ALB hostname
+```
+
+## CI/CD (Jenkins)
+
+`Jenkinsfile`: checkout, `npm ci` and tests, Docker build, push to Amazon ECR tagged with the git SHA. It polls GitHub every 2 minutes, because a webhook cannot reach a private Jenkins. ECR access uses the Jenkins host's IAM role; no credentials are stored. The deploy stages (kubectl apply, rollout status, ALB URL) follow in Phase 6.
+
 ## Layout
 
 ```
@@ -40,4 +64,6 @@ src/app.js          Express app (exported for tests)
 src/server.js       starts the app on 0.0.0.0:3000, shuts down cleanly on SIGTERM
 test/app.test.js    tests for /health, /users and 404
 Dockerfile          multi-stage, npm ci, non-root
+k8s/                namespace, deployment, service, ingress
+Jenkinsfile         CI/CD pipeline
 ```
