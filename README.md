@@ -55,7 +55,19 @@ kubectl -n dentsu-demo-app get ingress   # ALB hostname
 
 ## CI/CD (Jenkins)
 
-`Jenkinsfile`: checkout, `npm ci` and tests, Docker build, push to Amazon ECR tagged with the git SHA. It polls GitHub every 2 minutes, because a webhook cannot reach a private Jenkins. ECR access uses the Jenkins host's IAM role; no credentials are stored. The deploy stages (kubectl apply, rollout status, ALB URL) follow in Phase 6.
+`Jenkinsfile` stages:
+
+1. **Checkout**, and work out the image tag (the short git SHA).
+2. **npm ci and test**, in the same Node image the Dockerfile uses.
+3. **Docker build** (the build runs the tests again).
+4. **Push to ECR**, skipped if that tag already exists (tags are immutable).
+5. **Deploy to EKS**: `kubectl apply` of all manifests, with the image filled in.
+6. **Rollout status**: waits for the new pods to be Ready and healthy behind the ALB. If the rollout fails, it runs `kubectl rollout undo` and fails the build.
+7. **ALB URL**: prints the public URL and checks `/health` and `/users`.
+
+It polls GitHub every 2 minutes, because a webhook cannot reach a private Jenkins, so a `git push` is deployed without anyone clicking Build. AWS access (ECR, EKS) uses the Jenkins host's IAM role; no credentials are stored in Jenkins.
+
+To roll back by hand: `kubectl -n dentsu-demo-app rollout undo deployment/dentsu-demo-app`, or revert the commit and let the pipeline redeploy.
 
 ## Layout
 
